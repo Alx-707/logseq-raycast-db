@@ -2,7 +2,7 @@
  * Quick Capture Command
  *
  * Quickly capture notes, thoughts, or tasks to Logseq.
- * Appends content to the current page in Logseq desktop app.
+ * Appends content to today's journal in Logseq.
  */
 
 import {
@@ -17,34 +17,24 @@ import {
   Icon,
   Keyboard,
 } from "@raycast/api";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { logseqAPI } from "./services";
 import type { Preferences, QuickCaptureFormValues } from "./types";
 
 export default function QuickCapture() {
-  const preferences = getPreferenceValues<Preferences>();
+  const preferences = useMemo(() => getPreferenceValues<Preferences>(), []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contentError, setContentError] = useState<string | undefined>();
 
   async function handleSubmit(values: QuickCaptureFormValues) {
-    // Validate content
     if (!values.content.trim()) {
       setContentError("Content cannot be empty");
       return;
     }
     setContentError(undefined);
-
     setIsSubmitting(true);
 
     try {
-      // Check if API token is configured
-      if (!preferences.apiToken) {
-        throw new Error(
-          "API token not configured. Please set it in extension preferences.\n" +
-            "Find your token in Logseq Settings > Features > HTTP APIs Server."
-        );
-      }
-
       // Parse tags
       const tags = values.tags
         ?.split(/[,\s]+/)
@@ -58,19 +48,17 @@ export default function QuickCapture() {
         template: preferences.captureTemplate,
       });
 
-      // Send to Logseq - append to today's journal
-      await logseqAPI.appendToJournal(formattedContent, preferences.apiToken);
+      await logseqAPI.appendToJournal(formattedContent);
 
       await showToast({
         style: Toast.Style.Success,
         title: "Captured!",
-        message: "Content added to Logseq",
+        message: "Content added to today's journal",
       });
 
-      // Close the form and return to Raycast root
       await popToRoot();
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
 
       let userMessage = errorMessage;
       if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
@@ -79,23 +67,18 @@ export default function QuickCapture() {
           "1. The HTTP server is running (python3 logseq_server.py)\n" +
           "2. Logseq desktop app is open\n" +
           "3. HTTP API Server is enabled in Logseq settings";
-      } else if (errorMessage.includes("API token")) {
-        userMessage = errorMessage;
       }
 
       await showToast({
         style: Toast.Style.Failure,
         title: "Capture Failed",
         message: userMessage,
+        primaryAction: errorMessage.includes("API token")
+          ? { title: "Open Settings", onAction: () => openExtensionPreferences() }
+          : undefined,
       });
     } finally {
       setIsSubmitting(false);
-    }
-  }
-
-  function dropContentErrorIfNeeded() {
-    if (contentError) {
-      setContentError(undefined);
     }
   }
 
@@ -104,11 +87,7 @@ export default function QuickCapture() {
       isLoading={isSubmitting}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Capture"
-            icon={Icon.Plus}
-            onSubmit={handleSubmit}
-          />
+          <Action.SubmitForm title="Capture" icon={Icon.Plus} onSubmit={handleSubmit} />
           <Action
             title="Open Preferences"
             icon={Icon.Gear}
@@ -123,7 +102,7 @@ export default function QuickCapture() {
         title="Content"
         placeholder="What's on your mind?"
         error={contentError}
-        onChange={dropContentErrorIfNeeded}
+        onChange={() => contentError && setContentError(undefined)}
         autoFocus
       />
 
@@ -145,10 +124,7 @@ export default function QuickCapture() {
 
       <Form.Description
         title="Note"
-        text={
-          "Content will be appended to the current page in Logseq.\n" +
-          "Make sure Logseq is running with HTTP API Server enabled."
-        }
+        text="Content will be appended to today's journal in Logseq."
       />
     </Form>
   );

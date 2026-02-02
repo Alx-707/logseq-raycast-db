@@ -12,7 +12,6 @@ import {
   showToast,
   Toast,
   popToRoot,
-  getPreferenceValues,
   openExtensionPreferences,
   Icon,
   Keyboard,
@@ -20,10 +19,8 @@ import {
 } from "@raycast/api";
 import { useState } from "react";
 import { logseqAPI } from "./services";
-import type { Preferences } from "./types";
 
 export default function CaptureToJournal() {
-  const preferences = getPreferenceValues<Preferences>();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(values: { content: string }) {
@@ -39,26 +36,7 @@ export default function CaptureToJournal() {
     setIsSubmitting(true);
 
     try {
-      if (!preferences.apiToken) {
-        await showToast({
-          style: Toast.Style.Failure,
-          title: "API Token Required",
-          message: "Press ⌘+Shift+, to open settings and add your Logseq API token",
-          primaryAction: {
-            title: "Open Settings",
-            onAction: () => openExtensionPreferences(),
-          },
-        });
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Simple format: just the content
-      const formattedContent = values.content;
-
-      await logseqAPI.appendToJournal(formattedContent, preferences.apiToken);
-
-      // Use HUD for faster feedback
+      await logseqAPI.appendToJournal(values.content);
       await showHUD("✓ Captured to journal");
       await popToRoot();
     } catch (err) {
@@ -68,6 +46,9 @@ export default function CaptureToJournal() {
         style: Toast.Style.Failure,
         title: "Capture Failed",
         message: errorMessage,
+        primaryAction: errorMessage.includes("API token")
+          ? { title: "Open Settings", onAction: () => openExtensionPreferences() }
+          : undefined,
       });
     } finally {
       setIsSubmitting(false);
@@ -79,11 +60,7 @@ export default function CaptureToJournal() {
       isLoading={isSubmitting}
       actions={
         <ActionPanel>
-          <Action.SubmitForm
-            title="Capture"
-            icon={Icon.Calendar}
-            onSubmit={handleSubmit}
-          />
+          <Action.SubmitForm title="Capture" icon={Icon.Calendar} onSubmit={handleSubmit} />
           <Action
             title="Open Preferences"
             icon={Icon.Gear}
@@ -93,16 +70,8 @@ export default function CaptureToJournal() {
         </ActionPanel>
       }
     >
-      <Form.TextField
-        id="content"
-        title=""
-        placeholder="Quick note to today's journal..."
-        autoFocus
-      />
-      <Form.Description
-        title=""
-        text="Press Enter to capture to today's journal in Logseq"
-      />
+      <Form.TextField id="content" title="" placeholder="Quick note to today's journal..." autoFocus />
+      <Form.Description title="" text="Press Enter to capture to today's journal in Logseq" />
     </Form>
   );
 }

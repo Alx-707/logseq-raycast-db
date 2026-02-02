@@ -37,6 +37,7 @@ import urllib.parse
 import argparse
 import logging
 import os
+import shutil
 from pathlib import Path
 
 # Version
@@ -46,7 +47,7 @@ VERSION = '0.1.0'  # Bumped for Quick Capture support
 DEFAULT_PORT = 8765
 DEFAULT_HOST = 'localhost'
 LOG_FILE = Path(__file__).parent / 'logseq-http-server.log'
-LOGSEQ_BIN = '/opt/homebrew/bin/logseq'  # Full path to logseq CLI
+LOGSEQ_BIN = os.environ.get('LOGSEQ_BIN', shutil.which('logseq') or '/opt/homebrew/bin/logseq')
 
 # API Token for Logseq HTTP API (used for append command)
 # Can be overridden with --api-token flag or LOGSEQ_API_SERVER_TOKEN env var
@@ -233,43 +234,23 @@ class LogseqHTTPHandler(http.server.BaseHTTPRequestHandler):
         logging.info(f"Executing: {' '.join(cmd)}")
 
         try:
-            # Use full environment to ensure CLI has access to all necessary paths
             env = os.environ.copy()
-
-            # Set safe working directory to avoid EPERM errors
             safe_cwd = os.path.expanduser('~')
 
             # For query commands, pipe through jet to convert EDN to JSON
             if command == 'query':
-                # Run logseq query and pipe to jet
-                logseq_process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                # Use shell pipe - let the shell handle process management
+                shell_cmd = f"{' '.join(cmd)} | jet --to json"
+                result = subprocess.run(
+                    shell_cmd,
+                    shell=True,
+                    capture_output=True,
                     text=True,
+                    timeout=30,
                     env=env,
                     cwd=safe_cwd
                 )
-
-                jet_process = subprocess.Popen(
-                    ['jet', '--to', 'json'],
-                    stdin=logseq_process.stdout,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
-                )
-
-                # Allow logseq_process to receive a SIGPIPE if jet_process exits
-                logseq_process.stdout.close()
-
-                # Get output from jet
-                stdout, jet_stderr = jet_process.communicate(timeout=30)
-                logseq_stderr = logseq_process.stderr.read() if logseq_process.stderr else ""
-
-                returncode = jet_process.returncode
-                stderr = jet_stderr + logseq_stderr
             else:
-                # For non-query commands, run normally
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
@@ -278,9 +259,10 @@ class LogseqHTTPHandler(http.server.BaseHTTPRequestHandler):
                     env=env,
                     cwd=safe_cwd
                 )
-                stdout = result.stdout
-                stderr = result.stderr
-                returncode = result.returncode
+
+            stdout = result.stdout
+            stderr = result.stderr
+            returncode = result.returncode
 
             response = {
                 'success': returncode == 0,

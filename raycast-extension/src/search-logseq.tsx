@@ -1,3 +1,10 @@
+/**
+ * Search Logseq
+ *
+ * Search pages across your Logseq graphs.
+ * Uses the shared logseqAPI service and useGraphs hook.
+ */
+
 import {
   ActionPanel,
   Action,
@@ -7,245 +14,96 @@ import {
   showToast,
   Toast,
   openExtensionPreferences,
-  LocalStorage,
 } from "@raycast/api";
-import { useEffect, useState } from "react";
-
-interface Preferences {
-  graphName?: string;
-  serverUrl: string;
-  maxResults: string;
-}
-
-interface LogseqPage {
-  "block/uuid": string;
-  "block/title": string;
-  "block/name": string;
-  "db/id": number;
-  "block/journal-day"?: number;
-}
-
-interface SearchResponse {
-  success: boolean;
-  data?: LogseqPage[];
-  error?: string;
-  stderr?: string;
-}
-
-interface ListGraphsResponse {
-  success: boolean;
-  stdout?: string;
-  error?: string;
-  stderr?: string;
-}
-
-const STORAGE_KEY = "selected-graph";
+import { useEffect, useState, useMemo } from "react";
+import { logseqAPI } from "./services";
+import { useGraphs } from "./hooks/useGraphs";
+import type { Preferences, LogseqPage } from "./types";
 
 export default function SearchLogseq() {
-  const preferences = getPreferenceValues<Preferences>();
+  const preferences = useMemo(() => getPreferenceValues<Preferences>(), []);
+  const maxResults = useMemo(() => {
+    const parsed = parseInt(preferences.maxResults || "20", 10);
+    return isNaN(parsed) || parsed < 1 ? 20 : Math.min(parsed, 100);
+  }, [preferences.maxResults]);
+
+  const { graphs, selectedGraph, setSelectedGraph, isLoading: isLoadingGraphs, error: graphError } = useGraphs();
+
   const [searchText, setSearchText] = useState("");
   const [results, setResults] = useState<LogseqPage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedGraph, setSelectedGraph] = useState<string>("");
-  const [availableGraphs, setAvailableGraphs] = useState<string[]>([]);
-  const [isLoadingGraphs, setIsLoadingGraphs] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [initialGraph, setInitialGraph] = useState<string | null>(null);
-  const [firstGraph, setFirstGraph] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Fetch available graphs from server
-  useEffect(() => {
-    async function fetchGraphs() {
-      try {
-        const serverUrl = preferences.serverUrl || "http://localhost:8765";
-        const response = await fetch(`${serverUrl}/list`);
-
-        if (!response.ok) {
-          throw new Error(`Server error: ${response.status}`);
-        }
-
-        const data: ListGraphsResponse = await response.json();
-
-        if (!data.success) {
-          throw new Error(data.error || "Failed to fetch graphs");
-        }
-
-        // Parse graph names from stdout
-        const lines = (data.stdout || "").split("\n");
-        const graphNames = lines
-          .filter(
-            (line) =>
-              line.trim() &&
-              !line.includes(":") &&
-              line.trim() !== "DB Graphs" &&
-              line.trim() !== "File Graphs"
-          )
-          .map((line) => line.trim());
-
-        setAvailableGraphs(graphNames);
-
-        // Load saved graph selection from LocalStorage
-        const savedGraph = await LocalStorage.getItem<string>(STORAGE_KEY);
-
-        let graphToUse = "";
-        if (savedGraph && graphNames.includes(savedGraph)) {
-          // Use saved graph from previous session
-          graphToUse = savedGraph;
-        } else if (graphNames.length > 0) {
-          // No saved selection - default to first graph but DON'T save it
-          // Only save when user explicitly selects from dropdown
-          graphToUse = graphNames[0];
-        }
-        
-        // Store the first graph to detect Dropdown initialization calls
-        setFirstGraph(graphNames[0]);
-        
-        // Store the initial graph value to prevent onChange from firing for the same value
-        setInitialGraph(graphToUse);
-        setSelectedGraph(graphToUse);
-        
-        // Mark initialization as complete
-        setIsInitialized(true);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
-
-        if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
-          setError("Cannot connect to Logseq HTTP server. Make sure it's running.");
-        } else {
-          setError(`Failed to load graphs: ${errorMessage}`);
-        }
-      } finally {
-        setIsLoadingGraphs(false);
-      }
-    }
-
-    fetchGraphs();
-  }, [preferences.serverUrl]);
-
-  // Handle graph selection change
-  async function handleGraphChange(newGraph: string) {
-    // If this is trying to set the initial graph value during initialization, ignore it
-    if (!isInitialized && newGraph === initialGraph) {
-      return;
-    }
-    
-    // If this is trying to set the first graph when we already have a different selection, ignore it
-    // This handles the case where Dropdown calls onChange with first graph during render
-    if (isInitialized && newGraph === firstGraph && selectedGraph !== firstGraph) {
-      return;
-    }
-    
-    setSelectedGraph(newGraph);
-    
-    // Only save to LocalStorage if component is initialized (not during initial setup)
-    if (isInitialized) {
-      await LocalStorage.setItem(STORAGE_KEY, newGraph);
-    }
-    
-    // Clear results when changing graphs
-    setResults([]);
-    setSearchText("");
-  }
-
-
-
-  // Search functionality
+  // Search when text or graph changes
   useEffect(() => {
     if (!searchText.trim() || !selectedGraph) {
       setResults([]);
-      setError(null);
+      setSearchError(null);
       return;
     }
 
-    async function search() {
-      setIsLoading(true);
-      setError(null);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(async () => {
+      setIsSearching(true);
+      setSearchError(null);
 
       try {
-        const serverUrl = preferences.serverUrl || "http://localhost:8765";
-        const maxResults = parseInt(preferences.maxResults || "20");
-
-        const url = `${serverUrl}/search?q=${encodeURIComponent(searchText)}&graph=${encodeURIComponent(
-          selectedGraph
-        )}`;
-
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error(`Server error: ${response.status} ${response.statusText}`);
-        }
-
-        const data: SearchResponse = await response.json();
-
-        if (!data.success) {
-          throw new Error(data.error || data.stderr || "Search failed");
-        }
-
-        // Limit results
-        const pages = (data.data || []).slice(0, maxResults);
-        setResults(pages);
-
-        if (pages.length === 0) {
-          setError("No results found");
+        const pages = await logseqAPI.search(searchText, selectedGraph, maxResults);
+        if (!controller.signal.aborted) {
+          setResults(pages);
+          if (pages.length === 0) {
+            setSearchError("No results found");
+          }
         }
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
-
-        // Check if it's a connection error
-        if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
-          setError("Cannot connect to Logseq HTTP server. Make sure it's running.");
-        } else {
-          setError(errorMessage);
+        if (!controller.signal.aborted) {
+          const msg = err instanceof Error ? err.message : "Search failed";
+          setSearchError(msg);
+          setResults([]);
+          await showToast({ style: Toast.Style.Failure, title: "Search failed", message: msg });
         }
-
-        setResults([]);
-
-        await showToast({
-          style: Toast.Style.Failure,
-          title: "Search failed",
-          message: errorMessage,
-        });
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setIsSearching(false);
+        }
       }
-    }
+    }, 300);
 
-    // Debounce search
-    const timeoutId = setTimeout(search, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchText, selectedGraph, preferences.serverUrl, preferences.maxResults]);
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
+  }, [searchText, selectedGraph, maxResults]);
 
-  const openInLogseq = (page: LogseqPage) => {
-    const uuid = page["block/uuid"];
-    // Encode graph name to handle spaces and special characters
-    const encodedGraph = encodeURIComponent(selectedGraph);
-    const url = `logseq://graph/${encodedGraph}?block-id=${uuid}`;
-    return url;
+  // Clear results when graph changes
+  const handleGraphChange = async (graph: string) => {
+    await setSelectedGraph(graph);
+    setResults([]);
+    setSearchText("");
   };
+
+  const openInLogseq = (page: LogseqPage) =>
+    `logseq://graph/${encodeURIComponent(selectedGraph)}?block-id=${page["block/uuid"]}`;
+
+  const error = graphError || searchError;
 
   return (
     <List
-      isLoading={isLoading || isLoadingGraphs}
+      isLoading={isSearching || isLoadingGraphs}
       onSearchTextChange={setSearchText}
       searchBarPlaceholder={selectedGraph ? `Search in ${selectedGraph}...` : "Loading graphs..."}
       searchBarAccessory={
-        <List.Dropdown
-          tooltip="Select Graph"
-          value={selectedGraph}
-          onChange={handleGraphChange}
-          isLoading={isLoadingGraphs}
-        >
-          {availableGraphs.length === 0 ? (
+        <List.Dropdown tooltip="Select Graph" value={selectedGraph} onChange={handleGraphChange} isLoading={isLoadingGraphs}>
+          {graphs.length === 0 ? (
             <List.Dropdown.Item title="No graphs available" value="" />
           ) : (
-            availableGraphs.map((graph) => <List.Dropdown.Item key={graph} title={graph} value={graph} />)
+            graphs.map((g) => <List.Dropdown.Item key={g} title={g} value={g} />)
           )}
         </List.Dropdown>
       }
       throttle
     >
-      {error && !isLoading ? (
+      {error && !isSearching ? (
         <List.EmptyView
           icon={Icon.ExclamationMark}
           title="Error"
@@ -256,7 +114,7 @@ export default function SearchLogseq() {
             </ActionPanel>
           }
         />
-      ) : searchText && !isLoading && results.length === 0 ? (
+      ) : searchText && !isSearching && results.length === 0 ? (
         <List.EmptyView
           icon={Icon.MagnifyingGlass}
           title="No results found"
@@ -266,11 +124,7 @@ export default function SearchLogseq() {
         <List.EmptyView
           icon={Icon.Book}
           title="Search Logseq"
-          description={
-            selectedGraph
-              ? `Start typing to search pages in ${selectedGraph}`
-              : "Select a graph from the dropdown and start typing"
-          }
+          description={selectedGraph ? `Start typing to search pages in ${selectedGraph}` : "Select a graph and start typing"}
         />
       ) : (
         results.map((page) => (

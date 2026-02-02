@@ -179,16 +179,23 @@ class LogseqAPIService {
    *
    * This method uses the Logseq native API to append directly to today's journal,
    * regardless of what page is currently open in Logseq.
+   *
+   * @throws Error if API token is not configured
    */
   async appendToJournal(content: string, token?: string): Promise<void> {
     const apiToken = token || this.apiToken;
 
-    const body: Record<string, string> = { content };
-    if (apiToken) {
-      body.token = apiToken;
+    if (!apiToken) {
+      throw new Error(
+        "API token not configured. Please set it in extension preferences.\n" +
+        "Find your token in Logseq Settings > Features > HTTP APIs Server."
+      );
     }
 
-    const response = await this.post<AppendResponse>("/append-to-journal", body);
+    const response = await this.post<AppendResponse>("/append-to-journal", {
+      content,
+      token: apiToken,
+    });
 
     if (!response.success) {
       throw new Error(response.error || "Failed to append to journal");
