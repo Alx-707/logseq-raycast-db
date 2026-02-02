@@ -1,41 +1,57 @@
-# Logseq DB Raycast Extension
+# Logseq Raycast Extension
 
-Search and quick capture to your Logseq DB graph directly from Raycast.
+> 🚀 在 Raycast 中搜索和快速记录到 Logseq
 
-![Demo](./assets/demo.gif)
+## 这是什么？
 
-## Features
+一个 [Raycast](https://raycast.com/) 扩展，让你无需打开 Logseq 就能：
 
-- 🔍 **Search Logseq** - Full-text search across all your Logseq pages
-- ⚡ **Quick Capture** - Capture notes with tags and priority levels
-- 📝 **Quick Note** - Fastest way to jot down a quick thought
-- 🔄 **Graph Switching** - Easily switch between multiple graphs
-- 🔗 **Deep Links** - Open results directly in Logseq
+- **搜索** - 快速搜索 Logseq 中的页面
+- **快速记录** - 一键将想法记录到今天的 Journal
 
-## Requirements
+### 解决的问题
 
-1. **Logseq DB Version** - This extension is designed for the new Logseq DB version (not the file-based version)
-2. **@logseq/cli** - Install the CLI: `npm install -g @logseq/cli`
-3. **HTTP Server** - Run the companion HTTP server (included in this repo)
-4. **API Token** (for Quick Capture) - Enable HTTP API Server in Logseq settings
+使用 Logseq 记录想法时，传统流程是：切换到 Logseq → 打开 Journal → 输入内容。
 
-## Installation
+有了这个扩展，你只需：**按快捷键 → 输入 → 回车**，内容自动保存到今天的 Journal。
 
-### 1. Install the HTTP Server
+## 系统要求
+
+| 要求 | 说明 |
+|------|------|
+| Logseq DB 版本 | 新版 Logseq（非文件版本） |
+| @logseq/cli | `npm install -g @logseq/cli` |
+| Python 3 | 运行 HTTP Server |
+| Raycast | macOS 启动器 |
+
+## 快速开始
+
+### 1. 获取 Logseq API Token
+
+1. 打开 Logseq Desktop
+2. 进入 **Settings → Features → HTTP APIs Server**
+3. 启用并复制 Token
+
+### 2. 启动 HTTP Server
 
 ```bash
+# 克隆项目
+git clone https://github.com/Alx-707/logseq-raycast-db.git
+cd logseq-raycast-db
+
+# 启动服务器
 cd http-server
 python3 logseq_server.py --api-token YOUR_TOKEN
 ```
 
-Or set the token via environment variable:
+或使用环境变量：
 
 ```bash
 export LOGSEQ_API_SERVER_TOKEN=your-token
 python3 logseq_server.py
 ```
 
-### 2. Install the Raycast Extension
+### 3. 安装 Raycast 扩展
 
 ```bash
 cd raycast-extension
@@ -43,136 +59,91 @@ npm install
 npm run dev
 ```
 
-### 3. Configure the Extension
+### 4. 配置扩展
 
-1. Open Raycast Preferences (⌘,)
-2. Navigate to Extensions > Logseq DB
-3. Set your preferences:
-   - **Server URL**: Default is `http://localhost:8765`
-   - **API Token**: Your Logseq HTTP API Server token (for Quick Capture)
+1. 打开 Raycast 偏好设置 (`⌘ + ,`)
+2. 找到 **Logseq DB** 扩展
+3. 填入：
+   - **Server URL**: `http://localhost:8765`（默认）
+   - **API Token**: 第 1 步获取的 Token
 
-## Commands
+## 使用方法
+
+### Quick Note（推荐）
+
+最快的记录方式：
+
+1. `⌘ + Space` 打开 Raycast
+2. 输入 `Quick Note` 或设置快捷键
+3. 输入内容，按 `Enter`
+4. ✅ 自动保存到今天的 Journal
 
 ### Search Logseq
 
-Search pages in your Logseq DB graph.
+搜索 Logseq 中的页面：
 
-- Use the dropdown to switch between graphs
-- Results open directly in Logseq
-- Copy page links or titles to clipboard
+1. `⌘ + Space` 打开 Raycast
+2. 输入 `Search Logseq`
+3. 输入关键词搜索
+4. 选择结果，按 `Enter` 在 Logseq 中打开
 
-### Quick Capture to Logseq
+### Quick Capture
 
-Capture notes with additional options:
+带更多选项的记录：
 
-- **Tags**: Add multiple tags (comma or space separated)
-- **Priority**: Set priority level (A/B/C)
-- **Template**: Customize the capture format in preferences
+- 添加标签（如 `#todo #work`）
+- 设置优先级（A/B/C）
 
-### Quick Note
-
-The fastest way to capture a thought:
-
-- Single text field
-- Press Enter to capture
-- **Automatically appends to today's journal** (works even if Logseq has no page open)
-
-## API Token Setup
-
-To use Quick Capture features:
-
-1. Open Logseq Desktop
-2. Go to Settings → Features → HTTP APIs Server
-3. Enable the server and copy the token
-4. Paste the token in Raycast extension preferences
-
-## HTTP Server API
-
-The companion HTTP server provides these endpoints:
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/version` | GET | Server version |
-| `/list` | GET | List all graphs |
-| `/show?graph=NAME` | GET | Show graph info |
-| `/search?q=QUERY&graph=NAME` | GET | Search pages |
-| `/query` | POST | Execute Datalog query |
-| `/append` | POST | Append content to current page (requires API token) |
-| `/append-to-journal` | POST | Append content to today's journal (requires API token) |
-
-### Example: Append Content
-
-```bash
-curl -X POST http://localhost:8765/append \
-  -H "Content-Type: application/json" \
-  -d '{"content": "My quick note", "token": "your-api-token"}'
-```
-
-## Development
-
-### Project Structure
-
-```
-logseq-db-raycast/
-├── raycast-extension/
-│   ├── src/
-│   │   ├── search-logseq.tsx      # Search command
-│   │   ├── quick-capture.tsx      # Full capture form
-│   │   ├── capture-to-journal.tsx # Quick note command
-│   │   ├── services/
-│   │   │   └── logseq-api.ts      # API service
-│   │   ├── hooks/
-│   │   │   └── useGraphs.ts       # Graph selection hook
-│   │   └── types/
-│   │       └── logseq.ts          # TypeScript types
-│   └── package.json
-├── http-server/
-│   └── logseq_server.py           # Python HTTP server
-└── README.md
-```
-
-### Building
-
-```bash
-cd raycast-extension
-npm run build
-```
-
-### Linting
-
-```bash
-npm run lint
-npm run fix-lint
-```
-
-## Troubleshooting
+## 常见问题
 
 ### "Cannot connect to Logseq HTTP server"
 
-1. Make sure the HTTP server is running: `python3 logseq_server.py`
-2. Check that the server URL in preferences matches (default: `http://localhost:8765`)
-3. Verify no firewall is blocking the connection
+1. 确保 HTTP Server 正在运行
+2. 检查端口是否被占用：`lsof -i :8765`
 
 ### "Missing API token"
 
-1. Enable HTTP API Server in Logseq settings
-2. Copy the token from Logseq settings
-3. Paste it in Raycast extension preferences
+1. 确保 Logseq 已启用 HTTP API Server
+2. 检查 Token 是否正确复制到 Raycast 偏好设置
 
-### "append command failed"
+### 内容没有出现在 Logseq
 
-The `append` command requires Logseq desktop to be running with HTTP API Server enabled. Make sure:
+1. 确保 Logseq Desktop 正在运行
+2. 检查 Logseq 的 HTTP API Server 是否启用
+3. 查看服务器日志：`tail -f http-server/logseq-http-server.log`
 
-1. Logseq desktop app is open
-2. HTTP API Server is enabled in settings
-3. The correct token is configured
+更多问题请查看 [TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)
 
-## Credits
+## 项目结构
 
-- Original search extension by [kerim](https://github.com/kerim/raycast-logseq-search)
-- HTTP server by [kerim](https://github.com/kerim/logseq-http-server)
-- Quick Capture implementation by shawn
+```
+logseq-raycast-db/
+├── http-server/
+│   └── logseq_server.py      # Python HTTP 服务器
+├── raycast-extension/
+│   └── src/
+│       ├── capture-to-journal.tsx  # Quick Note 命令
+│       ├── quick-capture.tsx       # Quick Capture 命令
+│       ├── search-logseq.tsx       # Search 命令
+│       └── services/logseq-api.ts  # API 服务
+└── docs/
+    └── TROUBLESHOOTING.md    # 问题排查指南
+```
+
+## API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/list` | GET | 列出所有 Graph |
+| `/search?q=QUERY&graph=NAME` | GET | 搜索页面 |
+| `/append-to-journal` | POST | 追加到今天的 Journal |
+| `/append` | POST | 追加到当前打开的页面 |
+
+## 致谢
+
+- 原始搜索扩展 by [kerim](https://github.com/kerim/raycast-logseq-search)
+- HTTP Server by [kerim](https://github.com/kerim/logseq-http-server)
 
 ## License
 
