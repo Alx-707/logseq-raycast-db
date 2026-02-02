@@ -497,8 +497,6 @@ def main():
     if args.api_token:
         LOGSEQ_API_TOKEN = args.api_token
 
-    args = parser.parse_args()
-
     # Display debug warning if enabled
     if args.debug:
         import time

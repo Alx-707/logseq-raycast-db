@@ -101,7 +101,7 @@ export default function CaptureToJournal() {
       />
       <Form.Description
         title=""
-        text="Press Enter to capture to the current page in Logseq"
+        text="Press Enter to capture to today's journal in Logseq"
       />
     </Form>
   );
