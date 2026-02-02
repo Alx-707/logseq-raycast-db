@@ -1,0 +1,239 @@
+-- Logseq DB Sidekick Server Control
+-- AppleScript application to manage the Logseq HTTP server
+
+set plistPath to (POSIX path of (path to home folder)) & "Library/LaunchAgents/com.logseq.sidekick.server.plist"
+
+-- Main loop
+repeat
+	set userChoice to choose from list {"Check Status", "Start Server", "Stop Server", "Restart Server", "View Logs", "Clear Logs", "Enable Debug Mode", "Disable Debug Mode", "Check Debug Mode", "Quit"} with title "Logseq Server Control" with prompt "Manage Logseq DB Sidekick HTTP Server" default items {"Check Status"}
+	
+	if userChoice is false then exit repeat
+	
+	set action to item 1 of userChoice
+	
+	if action is "Check Status" then
+		-- Check if LaunchAgent is loaded
+		try
+			set agentStatus to do shell script "launchctl list | grep com.logseq.sidekick.server"
+			
+			-- Check HTTP endpoint
+			try
+				set httpStatus to do shell script "curl -s -o /dev/null -w '%{http_code}' http://localhost:8765/health"
+				if httpStatus is "200" then
+					display dialog "✅ Server is running" & return & return & "LaunchAgent: loaded" & return & "HTTP endpoint: responding" buttons {"OK"} default button 1 with icon note
+				else
+					display dialog "⚠️ Server loaded but not responding" & return & return & "LaunchAgent: loaded" & return & "HTTP endpoint: not responding (status " & httpStatus & ")" buttons {"OK"} default button 1 with icon caution
+				end if
+			on error
+				display dialog "⚠️ Server loaded but not responding" & return & return & "LaunchAgent: loaded" & return & "HTTP endpoint: connection failed" buttons {"OK"} default button 1 with icon caution
+			end try
+		on error
+			display dialog "🛑 Server is not running" & return & return & "LaunchAgent: not loaded" buttons {"OK"} default button 1 with icon stop
+		end try
+		
+	else if action is "Start Server" then
+		try
+			-- Check if already loaded
+			try
+				do shell script "launchctl list | grep com.logseq.sidekick.server"
+				display dialog "⚠️ Server is already running" & return & return & "Use 'Restart Server' if you want to restart it." buttons {"OK"} default button 1 with icon note
+			on error
+				-- Not loaded, so load it
+				do shell script "launchctl load -w " & quoted form of plistPath
+				delay 3
+				
+				-- Verify started
+				try
+					set httpStatus to do shell script "curl -s -o /dev/null -w '%{http_code}' http://localhost:8765/health"
+					if httpStatus is "200" then
+						display dialog "✅ Server started successfully" & return & return & "HTTP endpoint: http://localhost:8765" buttons {"OK"} default button 1 with icon note
+					else
+						display dialog "⚠️ Load command sent, but server not responding" & return & return & "Check logs for details." buttons {"OK"} default button 1 with icon caution
+					end if
+				on error
+					display dialog "⚠️ Load command sent, but server not responding" & return & return & "Check logs for details." buttons {"OK"} default button 1 with icon caution
+				end try
+			end try
+		on error errMsg
+			display dialog "🛑 Failed to start server" & return & return & errMsg buttons {"OK"} default button 1 with icon stop
+		end try
+		
+	else if action is "Stop Server" then
+		try
+			-- Check if loaded
+			try
+				do shell script "launchctl list | grep com.logseq.sidekick.server"
+				
+				-- Unload it
+				do shell script "launchctl unload " & quoted form of plistPath
+				delay 1
+				
+				-- Verify stopped
+				try
+					do shell script "launchctl list | grep com.logseq.sidekick.server"
+					display dialog "⚠️ Server may still be running" & return & return & "Try restarting or check logs." buttons {"OK"} default button 1 with icon caution
+				on error
+					display dialog "✅ Server stopped successfully" buttons {"OK"} default button 1 with icon note
+				end try
+			on error
+				display dialog "⚠️ Server is not running" & return & return & "Nothing to stop." buttons {"OK"} default button 1 with icon note
+			end try
+		on error errMsg
+			display dialog "🛑 Failed to stop server" & return & return & errMsg buttons {"OK"} default button 1 with icon stop
+		end try
+		
+	else if action is "Restart Server" then
+		try
+			-- Unload if loaded
+			try
+				do shell script "launchctl list | grep com.logseq.sidekick.server"
+				do shell script "launchctl unload " & quoted form of plistPath
+				delay 1
+			end try
+			
+			-- Load
+			do shell script "launchctl load -w " & quoted form of plistPath
+			delay 3
+			
+			-- Verify started
+			try
+				set httpStatus to do shell script "curl -s -o /dev/null -w '%{http_code}' http://localhost:8765/health"
+				if httpStatus is "200" then
+					display dialog "✅ Server restarted successfully" & return & return & "HTTP endpoint: http://localhost:8765" buttons {"OK"} default button 1 with icon note
+				else
+					display dialog "⚠️ Restart attempted, but server not responding" & return & return & "Check logs for details." buttons {"OK"} default button 1 with icon caution
+				end if
+			on error
+				display dialog "⚠️ Restart attempted, but server not responding" & return & return & "Check logs for details." buttons {"OK"} default button 1 with icon caution
+			end try
+		on error errMsg
+			display dialog "🛑 Failed to restart server" & return & return & errMsg buttons {"OK"} default button 1 with icon stop
+		end try
+		
+	else if action is "View Logs" then
+		try
+			-- Check if log file exists and has content
+			do shell script "test -s /tmp/logseq-server.log"
+			
+			-- Open log in Console app
+			do shell script "open -a Console /tmp/logseq-server.log"
+			
+			display dialog "Opening log in Console app..." & return & return & "Log file: /tmp/logseq-server.log" buttons {"OK"} default button 1 with icon note giving up after 2
+		on error
+			display dialog "⚠️ No log file with content found" & return & return & "The server may not have generated any logs yet." buttons {"OK"} default button 1 with icon note
+		end try
+		
+	else if action is "Clear Logs" then
+		try
+			-- Ask for confirmation
+			set confirmResult to display dialog "Clear server log?" & return & return & "This will empty:" & return & "/tmp/logseq-server.log" buttons {"Cancel", "Clear"} default button 2 with icon caution
+			
+			if button returned of confirmResult is "Clear" then
+				-- Clear log file
+				do shell script "cat /dev/null > /tmp/logseq-server.log"
+				
+				display dialog "✅ Log cleared successfully" & return & return & "Log file has been emptied." buttons {"OK"} default button 1 with icon note
+			end if
+		on error errMsg
+			if errMsg does not contain "User canceled" then
+				display dialog "🛑 Failed to clear log" & return & return & errMsg buttons {"OK"} default button 1 with icon stop
+			end if
+		end try
+		
+	else if action is "Enable Debug Mode" then
+		try
+			-- Check if plist exists
+			do shell script "test -f " & quoted form of plistPath
+			
+			-- Check if already in debug mode
+			try
+				do shell script "grep '<string>--debug</string>' " & quoted form of plistPath
+				display dialog "⚠️ Debug mode is already enabled" & return & return & "Use 'Disable Debug Mode' to turn it off." buttons {"OK"} default button 1 with icon note
+			on error
+				-- Not in debug mode, add it
+				set confirmResult to display dialog "Enable debug mode?" & return & return & "⚠️ WARNING: Debug mode logs all search queries in plain text." & return & return & "This will:" & return & "1. Add --debug flag to plist" & return & "2. Restart the server" & return & return & "Remember to disable it when done debugging!" buttons {"Cancel", "Enable Debug"} default button 1 with icon caution
+				
+				if button returned of confirmResult is "Enable Debug" then
+					-- Read the plist, find the logseq_server.py line, and add --debug after it
+					do shell script "sed -i '' '/logseq_server.py<\\/string>/a\\
+    <string>--debug</string>' " & quoted form of plistPath
+					
+					-- Restart server
+					try
+						do shell script "launchctl unload " & quoted form of plistPath
+						delay 1
+					end try
+					do shell script "launchctl load -w " & quoted form of plistPath
+					delay 3
+					
+					display dialog "✅ Debug mode enabled" & return & return & "Server has been restarted in debug mode." & return & return & "⚠️ Remember to disable debug mode when done!" buttons {"OK"} default button 1 with icon note
+				end if
+			end try
+		on error errMsg
+			if errMsg does not contain "User canceled" then
+				display dialog "🛑 Failed to enable debug mode" & return & return & errMsg buttons {"OK"} default button 1 with icon stop
+			end if
+		end try
+		
+	else if action is "Disable Debug Mode" then
+		try
+			-- Check if plist exists
+			do shell script "test -f " & quoted form of plistPath
+			
+			-- Check if in debug mode
+			try
+				do shell script "grep '<string>--debug</string>' " & quoted form of plistPath
+				
+				-- Remove debug flag
+				set confirmResult to display dialog "Disable debug mode?" & return & return & "This will:" & return & "1. Remove --debug flag from plist" & return & "2. Restart the server" & return & "3. Optionally clear logs" buttons {"Cancel", "Disable Debug"} default button 2 with icon note
+				
+				if button returned of confirmResult is "Disable Debug" then
+					-- Remove --debug flag from plist
+					do shell script "sed -i '' '/<string>--debug<\\/string>/d' " & quoted form of plistPath
+					
+					-- Ask about clearing logs
+					set clearLogsResult to display dialog "Clear debug logs?" & return & return & "Debug logs may contain sensitive information." & return & return & "Clear /tmp/logseq-server.log?" buttons {"No", "Yes, Clear Logs"} default button 2 with icon caution
+					
+					if button returned of clearLogsResult is "Yes, Clear Logs" then
+						do shell script "cat /dev/null > /tmp/logseq-server.log"
+					end if
+					
+					-- Restart server
+					try
+						do shell script "launchctl unload " & quoted form of plistPath
+						delay 1
+					end try
+					do shell script "launchctl load -w " & quoted form of plistPath
+					delay 3
+					
+					display dialog "✅ Debug mode disabled" & return & return & "Server has been restarted in privacy mode." buttons {"OK"} default button 1 with icon note
+				end if
+			on error
+				display dialog "⚠️ Debug mode is not enabled" & return & return & "Server is already in privacy mode." buttons {"OK"} default button 1 with icon note
+			end try
+		on error errMsg
+			if errMsg does not contain "User canceled" then
+				display dialog "🛑 Failed to disable debug mode" & return & return & errMsg buttons {"OK"} default button 1 with icon stop
+			end if
+		end try
+		
+	else if action is "Check Debug Mode" then
+		try
+			-- Check if plist exists
+			do shell script "test -f " & quoted form of plistPath
+			
+			-- Check if in debug mode
+			try
+				do shell script "grep '<string>--debug</string>' " & quoted form of plistPath
+				display dialog "🐛 Debug mode is ENABLED" & return & return & "⚠️ Server is logging all search queries." & return & return & "Use 'Disable Debug Mode' to turn it off." buttons {"OK"} default button 1 with icon caution
+			on error
+				display dialog "🔒 Debug mode is DISABLED" & return & return & "✅ Server is in privacy mode." & return & "Search queries are NOT logged." buttons {"OK"} default button 1 with icon note
+			end try
+		on error errMsg
+			display dialog "🛑 Could not check debug mode" & return & return & errMsg buttons {"OK"} default button 1 with icon stop
+		end try
+		
+	else if action is "Quit" then
+		exit repeat
+	end if
+end repeat

@@ -1,0 +1,100 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "logseq-db",
+  "version": "2.0.0",
+  "title": "Logseq DB",
+  "description": "Search and quick capture to your Logseq DB graph directly from Raycast",
+  "icon": "assets/extension-icon.png",
+  "author": "kerim",
+  "contributors": ["shawn"],
+  "categories": [
+    "Productivity",
+    "Data"
+  ],
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "search-logseq",
+      "title": "Search Logseq",
+      "description": "Search pages in your Logseq DB graph",
+      "mode": "view"
+    },
+    {
+      "name": "quick-capture",
+      "title": "Quick Capture to Logseq",
+      "description": "Capture notes with tags and priority to Logseq",
+      "mode": "view",
+      "keywords": ["capture", "note", "thought", "inbox"]
+    },
+    {
+      "name": "capture-to-journal",
+      "title": "Quick Note",
+      "description": "Fastest way to capture a quick note to Logseq",
+      "mode": "view",
+      "keywords": ["quick", "fast", "note", "journal"]
+    }
+  ],
+  "preferences": [
+    {
+      "name": "serverUrl",
+      "title": "Server URL",
+      "description": "URL of the Logseq HTTP server",
+      "type": "textfield",
+      "required": false,
+      "default": "http://localhost:8765"
+    },
+    {
+      "name": "graphName",
+      "title": "Default Graph Name",
+      "description": "Default graph name - you can also select from the dropdown in the search interface",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "my-graph"
+    },
+    {
+      "name": "maxResults",
+      "title": "Max Search Results",
+      "description": "Maximum number of search results to display",
+      "type": "textfield",
+      "required": false,
+      "default": "20"
+    },
+    {
+      "name": "apiToken",
+      "title": "Logseq API Token",
+      "description": "Token for Logseq HTTP API Server (required for Quick Capture). Find it in Logseq Settings > Features > HTTP APIs Server.",
+      "type": "password",
+      "required": false,
+      "placeholder": "your-api-token"
+    },
+    {
+      "name": "captureTemplate",
+      "title": "Capture Template",
+      "description": "Template for captured content. Use {content} as placeholder.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "{content}",
+      "default": "{content}"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.98.2",
+    "@raycast/utils": "^1.17.0"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.0.4",
+    "@types/node": "22.13.10",
+    "@types/react": "19.0.10",
+    "eslint": "^9.22.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint",
+    "prepublishOnly": "echo \"\n\nIt seems like you are trying to publish the Raycast extension to npm.\n\nIf you did intend to publish it to npm, remove the \\`prepublishOnly\\` script and rerun \\`npm publish\\` again.\nIf you wanted to publish it to the Raycast Store instead, use \\`npm run publish\\` instead.\n\n\" && exit 1",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
