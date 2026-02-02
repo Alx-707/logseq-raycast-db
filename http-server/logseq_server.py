@@ -38,6 +38,7 @@ import argparse
 import logging
 import os
 import shutil
+import shlex
 from pathlib import Path
 
 # Version
@@ -239,8 +240,9 @@ class LogseqHTTPHandler(http.server.BaseHTTPRequestHandler):
 
             # For query commands, pipe through jet to convert EDN to JSON
             if command == 'query':
-                # Use shell pipe - let the shell handle process management
-                shell_cmd = f"{' '.join(cmd)} | jet --to json"
+                # Use shell pipe with proper quoting
+                quoted_cmd = ' '.join(shlex.quote(arg) for arg in cmd)
+                shell_cmd = f"{quoted_cmd} | jet --to json"
                 result = subprocess.run(
                     shell_cmd,
                     shell=True,
